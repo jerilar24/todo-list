@@ -16,9 +16,9 @@ class ListSummary(BaseModel):
 
 
 class ToDoListItem(BaseModel):
-    id: str
+    id: Optional[str]
     label: str
-    checked: bool
+    checked: Optional[bool]
 
     @staticmethod
     def from_doc(item) -> "ToDoListItem":
