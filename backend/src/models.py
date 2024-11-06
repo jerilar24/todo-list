@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel
 
 
@@ -16,19 +14,33 @@ class ListSummary(BaseModel):
 
 
 class ToDoListItem(BaseModel):
-    id: Optional[str]
+    id: str
     label: str
-    checked: Optional[bool]
+    checked: bool
 
     @staticmethod
     def from_doc(item) -> "ToDoListItem":
         return ToDoListItem(id=item["id"], label=item["label"], checked=item["checked"])
 
 
+class NewItem(BaseModel):
+    label: str
+
+
+class NewItemResponse(BaseModel):
+    id: str
+    label: str
+
+
+class ToDoItemUpdate(BaseModel):
+    item_id: str
+    checked_state: bool
+
+
 class ToDoList(BaseModel):
-    id: Optional[str]
+    id: str
     name: str
-    items: Optional[list[ToDoListItem]]
+    items: list[ToDoListItem]
 
     @staticmethod
     def from_doc(doc) -> "ToDoList":
@@ -37,3 +49,12 @@ class ToDoList(BaseModel):
             name=doc["name"],
             items=[ToDoListItem.from_doc(item) for item in doc["items"]],
         )
+
+
+class NewList(BaseModel):
+    name: str
+
+
+class NewListResponse(BaseModel):
+    id: str
+    name: str
