@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import "./App.css";
-import ListToDoLists from "./ListTodoLists";
-import ToDoList from "./ToDoList";
+import ListToDoLists from "./ListTodoList";
+import ToDoList from "./TodoList";
 
 function App() {
     const [listSummaries, setListSummaries] = useState(null);

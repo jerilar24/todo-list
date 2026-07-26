@@ -1,4 +1,4 @@
-import "./ToDoList.css";
+import "./TodoList.css";
 import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { BiSolidTrash } from "react-icons/bi";
