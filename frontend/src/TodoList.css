@@ -1,3 +1,8 @@
+.ToDoList {
+    width: min(50rem, calc(100% - 2rem));
+    margin: 0 auto;
+}
+
 .ToDoList .back {
     margin: 0 1em;
     padding: 1em;
@@ -10,6 +15,7 @@
     margin: 1em;
     cursor: pointer;
     display: flex;
+    align-items: center;
 }
 
 .ToDoList .label {
@@ -19,4 +25,17 @@
 .ToDoList .checked .label {
     text-decoration: line-through;
     color: lightgray;
+}
+
+.new-item {
+    display: flex;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.new-item label {
+    display: grid;
+    flex: 1;
+    gap: 0.25rem;
+    text-align: left;
 }

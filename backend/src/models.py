@@ -1,15 +1,47 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class NamedModel(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Name cannot be empty")
+        return value
+
+
+class Folder(NamedModel):
+    id: str
+
+    @staticmethod
+    def from_doc(doc) -> "Folder":
+        return Folder(id=str(doc["_id"]), name=doc["name"])
+
+
+class NewFolder(NamedModel):
+    pass
+
+
+class RenameRequest(NamedModel):
+    pass
 
 
 class ListSummary(BaseModel):
     id: str
     name: str
     item_count: int
+    folder_id: str | None = None
 
     @staticmethod
     def from_doc(doc) -> "ListSummary":
         return ListSummary(
-            id=str(doc["_id"]), name=doc["name"], item_count=doc["item_count"]
+            id=str(doc["_id"]),
+            name=doc["name"],
+            item_count=doc["item_count"],
+            folder_id=str(doc["folder_id"]) if doc.get("folder_id") else None,
         )
 
 
@@ -40,6 +72,7 @@ class ToDoItemUpdate(BaseModel):
 class ToDoList(BaseModel):
     id: str
     name: str
+    folder_id: str | None = None
     items: list[ToDoListItem]
 
     @staticmethod
@@ -47,14 +80,30 @@ class ToDoList(BaseModel):
         return ToDoList(
             id=str(doc["_id"]),
             name=doc["name"],
+            folder_id=str(doc["folder_id"]) if doc.get("folder_id") else None,
             items=[ToDoListItem.from_doc(item) for item in doc["items"]],
         )
 
 
-class NewList(BaseModel):
-    name: str
+class NewList(NamedModel):
+    folder_id: str | None = None
 
 
-class NewListResponse(BaseModel):
+class NewListResponse(NamedModel):
     id: str
-    name: str
+    folder_id: str | None = None
+
+
+class ListUpdate(BaseModel):
+    name: str | None = None
+    folder_id: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def clean_optional_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Name cannot be empty")
+        return value
