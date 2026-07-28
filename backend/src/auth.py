@@ -75,8 +75,8 @@ class AuthDAL:
         doc = await self.users.find_one(
             {"$or": [{"email": normalized}, {"username": normalized}]}
         )
-        valid = password_hash.verify(password, doc["password_hash"] if doc else DUMMY_HASH)
-        if not doc or not valid:
+
+        if not doc or not password_hash.verify(password, doc["password_hash"]):
             await self.record_failure(identifier)
             return None
         await self.attempts.delete_many({"identifier": normalized})
