@@ -1,14 +1,22 @@
 import { useState } from "react";
-import { BiEdit, BiFolder, BiSolidTrash } from "react-icons/bi";
+import { BiEdit, BiFolder, BiKey, BiLock, BiSolidTrash } from "react-icons/bi";
 import "./ListTodoList.css";
 import Modal from "./Modal";
 
 function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
     const [newFolderName, setNewFolderName] = useState("");
+    const [newFolderSecret, setNewFolderSecret] = useState(false);
+    const [newFolderPassword, setNewFolderPassword] = useState("");
+    const [newFolderConfirmation, setNewFolderConfirmation] = useState("");
     const [newListName, setNewListName] = useState("");
     const [newListFolder, setNewListFolder] = useState("");
     const [editing, setEditing] = useState(null);
     const [deletingFolder, setDeletingFolder] = useState(null);
+    const [deletePassword, setDeletePassword] = useState("");
+    const [protectingFolder, setProtectingFolder] = useState(null);
+    const [showSecrets, setShowSecrets] = useState(false);
+    const [secretFolders, setSecretFolders] = useState(null);
+    const [secretError, setSecretError] = useState("");
     const [saving, setSaving] = useState(false);
 
     if (folders === null || listSummaries === null) {
@@ -38,16 +46,34 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
     }
 
     function requestFolderDelete(folder) {
-        if (listsIn(folder.id).length === 0) {
+        if (listsIn(folder.id).length === 0 && !folder.is_secret) {
             actions.deleteFolder(folder.id, "unfiled");
         } else {
+            setDeletePassword("");
             setDeletingFolder(folder);
+        }
+    }
+
+    async function openSecrets() {
+        setShowSecrets(true);
+        setSecretFolders(null);
+        setSecretError("");
+        try {
+            const response = await actions.listSecretFolders();
+            setSecretFolders(response.data);
+        } catch (requestError) {
+            setSecretError(
+                requestError.response?.data?.detail || "Unable to load secret folders."
+            );
         }
     }
 
     return (
         <main className="ListToDoLists">
-            <h1>To-Do Lists</h1>
+            <div className="title-row">
+                <h1>To-Do Lists</h1>
+                <button onClick={openSecrets}><BiKey /> Secret folders</button>
+            </div>
 
             <section className="create-panel">
                 <form
@@ -55,8 +81,22 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
                         event.preventDefault();
                         if (!newFolderName.trim()) return;
                         submit(
-                            () => actions.createFolder(newFolderName),
-                            () => setNewFolderName("")
+                            () =>
+                                actions.createFolder({
+                                    name: newFolderName,
+                                    ...(newFolderSecret
+                                        ? {
+                                              password: newFolderPassword,
+                                              confirm_password: newFolderConfirmation,
+                                          }
+                                        : {}),
+                                }),
+                            () => {
+                                setNewFolderName("");
+                                setNewFolderPassword("");
+                                setNewFolderConfirmation("");
+                                setNewFolderSecret(false);
+                            }
                         );
                     }}
                 >
@@ -67,7 +107,51 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
                             onChange={(event) => setNewFolderName(event.target.value)}
                         />
                     </label>
-                    <button disabled={saving}>Add folder</button>
+                    <label className="secret-toggle">
+                        <input
+                            type="checkbox"
+                            checked={newFolderSecret}
+                            onChange={(event) => setNewFolderSecret(event.target.checked)}
+                        />
+                        Make secret
+                    </label>
+                    {newFolderSecret && (
+                        <>
+                            <label>
+                                Password
+                                <input
+                                    required
+                                    minLength="8"
+                                    maxLength="128"
+                                    type="password"
+                                    value={newFolderPassword}
+                                    onChange={(event) =>
+                                        setNewFolderPassword(event.target.value)
+                                    }
+                                />
+                            </label>
+                            <label>
+                                Confirm password
+                                <input
+                                    required
+                                    type="password"
+                                    value={newFolderConfirmation}
+                                    onChange={(event) =>
+                                        setNewFolderConfirmation(event.target.value)
+                                    }
+                                />
+                            </label>
+                        </>
+                    )}
+                    <button
+                        disabled={
+                            saving ||
+                            (newFolderSecret &&
+                                newFolderPassword !== newFolderConfirmation)
+                        }
+                    >
+                        Add folder
+                    </button>
                 </form>
 
                 <form
@@ -108,7 +192,12 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
             {sections.map((folder) => (
                 <section className="folder" key={folder.id || "unfiled"}>
                     <header>
-                        <h2><BiFolder /> {folder.name}</h2>
+                        <h2>
+                            <BiFolder /> {folder.name}
+                            {folder.is_secret && (
+                                <BiLock aria-label="Secret folder" title="Secret folder" />
+                            )}
+                        </h2>
                         {folder.id && (
                             <div className="row-actions">
                                 <button
@@ -116,6 +205,12 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
                                     onClick={() => setEditing({ type: "folder", ...folder })}
                                 >
                                     <BiEdit />
+                                </button>
+                                <button
+                                    aria-label={`Manage protection for ${folder.name}`}
+                                    onClick={() => setProtectingFolder(folder)}
+                                >
+                                    <BiKey />
                                 </button>
                                 <button
                                     aria-label={`Delete folder ${folder.name}`}
@@ -187,17 +282,32 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
 
             {deletingFolder && (
                 <Modal
-                    title={`Delete “${deletingFolder.name}”?`}
+                    title={`Delete "${deletingFolder.name}"?`}
                     onClose={() => setDeletingFolder(null)}
                 >
                     <p>This folder contains {listsIn(deletingFolder.id).length} list(s).</p>
+                    {deletingFolder.is_secret && (
+                        <label>
+                            Current folder password
+                            <input
+                                autoFocus
+                                type="password"
+                                value={deletePassword}
+                                onChange={(event) => setDeletePassword(event.target.value)}
+                            />
+                        </label>
+                    )}
                     <div className="modal-actions">
                         <button onClick={() => setDeletingFolder(null)}>Cancel</button>
                         <button
-                            disabled={saving}
+                            disabled={saving || (deletingFolder.is_secret && !deletePassword)}
                             onClick={() =>
                                 submit(
-                                    () => actions.deleteFolder(deletingFolder.id, "unfiled"),
+                                    () => actions.deleteFolder(
+                                        deletingFolder.id,
+                                        "unfiled",
+                                        deletePassword
+                                    ),
                                     () => setDeletingFolder(null)
                                 )
                             }
@@ -206,10 +316,14 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
                         </button>
                         <button
                             className="danger"
-                            disabled={saving}
+                            disabled={saving || (deletingFolder.is_secret && !deletePassword)}
                             onClick={() =>
                                 submit(
-                                    () => actions.deleteFolder(deletingFolder.id, "delete"),
+                                    () => actions.deleteFolder(
+                                        deletingFolder.id,
+                                        "delete",
+                                        deletePassword
+                                    ),
                                     () => setDeletingFolder(null)
                                 )
                             }
@@ -219,7 +333,211 @@ function ListToDoLists({ folders, listSummaries, actions, handleSelectList }) {
                     </div>
                 </Modal>
             )}
+
+            {protectingFolder && (
+                <ProtectionModal
+                    folder={protectingFolder}
+                    saving={saving}
+                    onClose={() => setProtectingFolder(null)}
+                    onProtect={(data) =>
+                        submit(
+                            () => actions.protectFolder(protectingFolder.id, data),
+                            () => setProtectingFolder(null)
+                        )
+                    }
+                    onChange={(data) =>
+                        submit(
+                            () => actions.changeFolderPassword(protectingFolder.id, data),
+                            () => setProtectingFolder(null)
+                        )
+                    }
+                    onRemove={(password) =>
+                        submit(
+                            () => actions.removeFolderProtection(
+                                protectingFolder.id,
+                                password
+                            ),
+                            () => setProtectingFolder(null)
+                        )
+                    }
+                />
+            )}
+
+            {showSecrets && (
+                <SecretFoldersModal
+                    folders={secretFolders}
+                    error={secretError}
+                    onClose={() => setShowSecrets(false)}
+                    onUnlock={async (folder, password) => {
+                        try {
+                            await actions.unlockFolder(folder.id, password);
+                            setSecretFolders((current) =>
+                                current.map((item) =>
+                                    item.id === folder.id
+                                        ? { ...item, is_unlocked: true }
+                                        : item
+                                )
+                            );
+                            setSecretError("");
+                            return true;
+                        } catch (requestError) {
+                            setSecretError(
+                                requestError.response?.data?.detail ||
+                                    "Unable to unlock this folder."
+                            );
+                            return false;
+                        }
+                    }}
+                />
+            )}
         </main>
+    );
+}
+
+function ProtectionModal({ folder, saving, onClose, onProtect, onChange, onRemove }) {
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [password, setPassword] = useState("");
+    const [confirmation, setConfirmation] = useState("");
+    const validNewPassword =
+        password.length >= 8 && password.length <= 128 && password === confirmation;
+
+    return (
+        <Modal title={`${folder.is_secret ? "Manage" : "Add"} protection`} onClose={onClose}>
+            <form
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!validNewPassword) return;
+                    const data = {
+                        ...(folder.is_secret
+                            ? { current_password: currentPassword }
+                            : {}),
+                        password,
+                        confirm_password: confirmation,
+                    };
+                    folder.is_secret ? onChange(data) : onProtect(data);
+                }}
+            >
+                {folder.is_secret && (
+                    <label>
+                        Current password
+                        <input
+                            autoFocus
+                            required
+                            type="password"
+                            value={currentPassword}
+                            onChange={(event) => setCurrentPassword(event.target.value)}
+                        />
+                    </label>
+                )}
+                <label>
+                    {folder.is_secret ? "New password" : "Password"}
+                    <input
+                        autoFocus={!folder.is_secret}
+                        required
+                        minLength="8"
+                        maxLength="128"
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                    />
+                </label>
+                <label>
+                    Confirm password
+                    <input
+                        required
+                        type="password"
+                        value={confirmation}
+                        onChange={(event) => setConfirmation(event.target.value)}
+                    />
+                </label>
+                <div className="modal-actions">
+                    <button type="button" onClick={onClose}>Cancel</button>
+                    {folder.is_secret && (
+                        <button
+                            type="button"
+                            className="danger"
+                            disabled={saving || !currentPassword}
+                            onClick={() => onRemove(currentPassword)}
+                        >
+                            Remove protection
+                        </button>
+                    )}
+                    <button
+                        disabled={
+                            saving ||
+                            !validNewPassword ||
+                            (folder.is_secret && !currentPassword)
+                        }
+                    >
+                        {folder.is_secret ? "Change password" : "Make secret"}
+                    </button>
+                </div>
+            </form>
+        </Modal>
+    );
+}
+
+function SecretFoldersModal({ folders, error, onClose, onUnlock }) {
+    const [selected, setSelected] = useState(null);
+    const [password, setPassword] = useState("");
+    const [unlocking, setUnlocking] = useState(false);
+
+    async function unlock(event) {
+        event.preventDefault();
+        setUnlocking(true);
+        const unlocked = await onUnlock(selected, password);
+        setUnlocking(false);
+        if (unlocked) {
+            setSelected(null);
+            setPassword("");
+        }
+    }
+
+    return (
+        <Modal title="Secret folders" onClose={onClose}>
+            {error && <div className="error" role="alert">{error}</div>}
+            {folders === null ? (
+                <p>Loading secret folders ...</p>
+            ) : folders.length === 0 ? (
+                <p>There are no secret folders.</p>
+            ) : (
+                <div className="secret-folder-list">
+                    {folders.map((folder) => (
+                        <button
+                            key={folder.id}
+                            disabled={folder.is_unlocked}
+                            onClick={() => {
+                                setSelected(folder);
+                                setPassword("");
+                            }}
+                        >
+                            <BiLock /> {folder.name}
+                            {folder.is_unlocked ? " - Unlocked" : ""}
+                        </button>
+                    ))}
+                </div>
+            )}
+            {selected && (
+                <form onSubmit={unlock}>
+                    <label>
+                        Password for {selected.name}
+                        <input
+                            autoFocus
+                            required
+                            type="password"
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                        />
+                    </label>
+                    <div className="modal-actions">
+                        <button type="button" onClick={() => setSelected(null)}>
+                            Cancel
+                        </button>
+                        <button disabled={unlocking || !password}>Unlock</button>
+                    </div>
+                </form>
+            )}
+        </Modal>
     );
 }
 

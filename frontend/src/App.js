@@ -46,13 +46,29 @@ function Workspace({ user, onLogout }) {
     }
 
     const actions = {
-        createFolder: (name) => mutate(() => axios.post("/api/folders", { name })),
+        createFolder: (data) => mutate(() => axios.post("/api/folders", data)),
         renameFolder: (id, name) =>
             mutate(() => axios.patch(`/api/folders/${id}`, { name })),
-        deleteFolder: (id, listAction) =>
+        deleteFolder: (id, listAction, password) =>
             mutate(() =>
                 axios.delete(`/api/folders/${id}`, {
                     params: { list_action: listAction },
+                    data: password ? { password } : undefined,
+                })
+            ),
+        listSecretFolders: () => axios.get("/api/secret-folders"),
+        unlockFolder: async (id, password) => {
+            await axios.post(`/api/secret-folders/${id}/unlock`, { password });
+            await reloadData();
+        },
+        protectFolder: (id, data) =>
+            mutate(() => axios.post(`/api/folders/${id}/protection`, data)),
+        changeFolderPassword: (id, data) =>
+            mutate(() => axios.patch(`/api/folders/${id}/protection`, data)),
+        removeFolderProtection: (id, password) =>
+            mutate(() =>
+                axios.delete(`/api/folders/${id}/protection`, {
+                    data: { password },
                 })
             ),
         createList: (name, folderId) =>

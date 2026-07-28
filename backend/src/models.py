@@ -15,14 +15,79 @@ class NamedModel(BaseModel):
 
 class Folder(NamedModel):
     id: str
+    is_secret: bool = False
 
     @staticmethod
     def from_doc(doc) -> "Folder":
-        return Folder(id=str(doc["_id"]), name=doc["name"])
+        return Folder(
+            id=str(doc["_id"]),
+            name=doc["name"],
+            is_secret=bool(doc.get("password_hash")),
+        )
 
 
 class NewFolder(NamedModel):
-    pass
+    password: str | None = None
+    confirm_password: str | None = None
+
+    @model_validator(mode="after")
+    def valid_secret_password(self):
+        if self.password is None and self.confirm_password is None:
+            return self
+        if self.password is None or not 8 <= len(self.password) <= 128:
+            raise ValueError("Password must be 8 to 128 characters")
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class SecretFolderSummary(Folder):
+    is_unlocked: bool
+
+
+class PasswordRequest(BaseModel):
+    password: str
+
+
+class SetFolderPassword(BaseModel):
+    password: str
+    confirm_password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not 8 <= len(value) <= 128:
+            raise ValueError("Password must be 8 to 128 characters")
+        return value
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class ChangeFolderPassword(BaseModel):
+    current_password: str
+    password: str
+    confirm_password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not 8 <= len(value) <= 128:
+            raise ValueError("Password must be 8 to 128 characters")
+        return value
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class FolderDeleteRequest(BaseModel):
+    password: str | None = None
 
 
 class RenameRequest(NamedModel):

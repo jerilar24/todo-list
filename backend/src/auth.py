@@ -60,6 +60,7 @@ class AuthDAL:
     async def login_blocked(self, identifier: str) -> bool:
         return await self.attempts.count_documents(
             {
+                "kind": "login",
                 "identifier": normalize(identifier),
                 "created_at": {"$gte": utc_now() - ATTEMPT_WINDOW},
             }
@@ -67,7 +68,11 @@ class AuthDAL:
 
     async def record_failure(self, identifier: str):
         await self.attempts.insert_one(
-            {"identifier": normalize(identifier), "created_at": utc_now()}
+            {
+                "kind": "login",
+                "identifier": normalize(identifier),
+                "created_at": utc_now(),
+            }
         )
 
     async def authenticate(self, identifier: str, password: str) -> PublicUser | None:
@@ -79,7 +84,7 @@ class AuthDAL:
         if not doc or not password_hash.verify(password, doc["password_hash"]):
             await self.record_failure(identifier)
             return None
-        await self.attempts.delete_many({"identifier": normalized})
+        await self.attempts.delete_many({"kind": "login", "identifier": normalized})
         return PublicUser.from_doc(doc)
 
     async def create_session(self, user_id: str) -> str:
@@ -96,7 +101,7 @@ class AuthDAL:
         )
         return token
 
-    async def get_user_for_session(self, token: str) -> PublicUser | None:
+    async def get_user_for_session(self, token: str):
         now = utc_now()
         session = await self.sessions.find_one_and_update(
             {"token_hash": token_digest(token), "expires_at": {"$gt": now}},
@@ -105,7 +110,54 @@ class AuthDAL:
         if not session:
             return None
         user = await self.users.find_one({"_id": session["user_id"]})
-        return PublicUser.from_doc(user) if user else None
+        if not user:
+            return None
+        return PublicUser.from_doc(user), session
 
     async def logout(self, token: str):
         await self.sessions.delete_one({"token_hash": token_digest(token)})
+
+    async def grant_folder(self, session_id, folder_id: str):
+        await self.sessions.update_one(
+            {"_id": session_id},
+            {"$addToSet": {"unlocked_folder_ids": ObjectId(folder_id)}},
+        )
+
+    async def revoke_folder_from_other_sessions(
+        self, user_id: str, folder_id: str, keep_session_id=None
+    ):
+        query = {"user_id": ObjectId(user_id)}
+        if keep_session_id is not None:
+            query["_id"] = {"$ne": keep_session_id}
+        await self.sessions.update_many(
+            query, {"$pull": {"unlocked_folder_ids": ObjectId(folder_id)}}
+        )
+
+    async def folder_unlock_blocked(self, user_id: str, folder_id: str) -> bool:
+        return await self.attempts.count_documents(
+            {
+                "kind": "folder",
+                "user_id": ObjectId(user_id),
+                "folder_id": ObjectId(folder_id),
+                "created_at": {"$gte": utc_now() - ATTEMPT_WINDOW},
+            }
+        ) >= MAX_ATTEMPTS
+
+    async def record_folder_failure(self, user_id: str, folder_id: str):
+        await self.attempts.insert_one(
+            {
+                "kind": "folder",
+                "user_id": ObjectId(user_id),
+                "folder_id": ObjectId(folder_id),
+                "created_at": utc_now(),
+            }
+        )
+
+    async def clear_folder_failures(self, user_id: str, folder_id: str):
+        await self.attempts.delete_many(
+            {
+                "kind": "folder",
+                "user_id": ObjectId(user_id),
+                "folder_id": ObjectId(folder_id),
+            }
+        )
