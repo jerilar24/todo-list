@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 
 class NamedModel(BaseModel):
@@ -107,3 +107,65 @@ class ListUpdate(BaseModel):
         if not value:
             raise ValueError("Name cannot be empty")
         return value
+
+
+class PublicUser(BaseModel):
+    id: str
+    name: str
+    email: EmailStr
+    username: str | None = None
+
+    @staticmethod
+    def from_doc(doc) -> "PublicUser":
+        return PublicUser(
+            id=str(doc["_id"]),
+            name=doc["name"],
+            email=doc["email"],
+            username=doc.get("username"),
+        )
+
+
+class SignUpRequest(BaseModel):
+    name: str
+    email: EmailStr
+    username: str | None = None
+    password: str
+    confirm_password: str
+
+    @field_validator("name")
+    @classmethod
+    def clean_user_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Name cannot be empty")
+        return value
+
+    @field_validator("username")
+    @classmethod
+    def clean_username(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not 3 <= len(value) <= 30:
+            raise ValueError("Username must be 3 to 30 characters")
+        if any(not (char.isascii() and (char.isalnum() or char in "_.-")) for char in value):
+            raise ValueError("Username may only contain letters, numbers, _, -, and .")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not 8 <= len(value) <= 128:
+            raise ValueError("Password must be 8 to 128 characters")
+        return value
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class LoginRequest(BaseModel):
+    identifier: str
+    password: str

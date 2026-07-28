@@ -1,0 +1,51 @@
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #f4f6f8;
+}
+
+.auth-card {
+    width: min(25rem, calc(100% - 2rem));
+    padding: 2rem;
+    border: 1px solid #ddd;
+    border-radius: 0.6rem;
+    background: white;
+    box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.08);
+}
+
+.auth-card form,
+.auth-card label {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.auth-card form {
+    gap: 1rem;
+}
+
+.auth-card label {
+    text-align: left;
+}
+
+.auth-card label span {
+    color: #666;
+    font-size: 0.85rem;
+}
+
+.auth-card input {
+    padding: 0.55rem;
+}
+
+.link-button {
+    margin-top: 1rem;
+    border: 0;
+    background: transparent;
+    color: #2457a6;
+    cursor: pointer;
+}
+
+.field-error {
+    color: #a40000;
+    margin: 0;
+}

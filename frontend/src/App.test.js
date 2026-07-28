@@ -4,8 +4,19 @@ import App from "./App";
 
 jest.mock("axios");
 
+beforeEach(() => {
+    axios.interceptors = {
+        response: { use: jest.fn(() => 1), eject: jest.fn() },
+    };
+});
+
 test("groups lists into folders and keeps legacy lists unfiled", async () => {
     axios.get.mockImplementation((url) => {
+        if (url === "/api/auth/me") {
+            return Promise.resolve({
+                data: { id: "user-1", name: "Ada", email: "ada@example.com" },
+            });
+        }
         if (url === "/api/folders") {
             return Promise.resolve({
                 data: [{ id: "folder-1", name: "Work" }],
@@ -26,7 +37,7 @@ test("groups lists into folders and keeps legacy lists unfiled", async () => {
 
     render(<App />);
 
-    expect(screen.getByText(/loading to-do lists/i)).toBeInTheDocument();
+    expect(screen.getByText(/loading/i)).toBeInTheDocument();
     await waitFor(() =>
         expect(
             screen.getByRole("heading", { name: /unfiled/i })
@@ -37,11 +48,9 @@ test("groups lists into folders and keeps legacy lists unfiled", async () => {
     expect(screen.getByText("Project")).toBeInTheDocument();
 });
 
-test("shows an error when initial data cannot be loaded", async () => {
+test("shows login when there is no valid session", async () => {
     axios.get.mockRejectedValue(new Error("offline"));
     render(<App />);
 
-    expect(
-        await screen.findByText("Unable to load your folders and to-do lists.")
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
 });
